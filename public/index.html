@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Materia Medica Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <header class="header">
+        <h1>Homeopathy Medicines Search</h1>
+        <p class="subtitle">Allen & Hering – Section-wise Search</p>
+    </header>
+
+    <main class="container">
+
+        <div class="search-panel">
+            <input id="searchInput" type="text" placeholder="Search term (e.g. tongue)" />
+            <select id="bookSelect">
+                <option value="allen">Allen Handbook</option>
+                <option value="hering">Hering – Guiding Symptoms</option>
+            </select>
+            <button id="searchBtn">Search</button>
+        </div>
+
+        <div id="results"></div>
+
+    </main>
+
+    <script src="index.js"></script>
+</body>
+
+</html>

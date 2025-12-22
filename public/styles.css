@@ -1,0 +1,209 @@
+/* ---------- Reset ---------- */
+* {
+    box-sizing: border-box;
+}
+
+/* ---------- Base ---------- */
+body {
+    margin: 0;
+    font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f4f6fb;
+    color: #1f2937;
+}
+
+/* ---------- Header ---------- */
+.header {
+    background: linear-gradient(135deg, #0f4c81, #0b2f4a);
+    color: #ffffff;
+    padding: 26px 24px;
+    text-align: center;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: 0.2px;
+}
+
+.subtitle {
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    opacity: 0.95;
+}
+
+/* ---------- Layout ---------- */
+.container {
+    max-width: 95vw;
+    margin: 24px auto;
+    padding: 0 24px;
+}
+
+/* ---------- Search Panel ---------- */
+.search-panel {
+    display: grid;
+    grid-template-columns: 1fr 240px 160px;
+    gap: 14px;
+    margin-bottom: 32px;
+}
+
+/* Inputs & Select */
+.search-panel input,
+.search-panel select {
+    height: 48px;
+    padding: 0 14px;
+    font-size: 15px;
+    border-radius: 10px;
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-panel input::placeholder {
+    color: #9ca3af;
+}
+
+.search-panel input:focus,
+.search-panel select:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* ---------- Search Button ---------- */
+.search-panel button {
+    height: 48px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #ffffff;
+    background: linear-gradient(135deg, #2563eb, #1e40af);
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.35);
+}
+
+.search-panel button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.45);
+}
+
+.search-panel button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+}
+
+.search-panel button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ---------- Remedy Card ---------- */
+.remedy-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 34px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.07);
+}
+
+.remedy-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f4c81;
+    margin-bottom: 18px;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 8px;
+}
+
+/* ---------- Sections Grid ---------- */
+.section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+}
+
+/* ---------- Section Card ---------- */
+.section-card {
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 16px;
+    border-left: 6px solid #2563eb;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---------- Section Subheading (Improved) ---------- */
+.section-title {
+    font-size: 15px;
+    font-weight: 800;
+    /* 🔥 stronger */
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    /* 🔥 distinct from body */
+    color: #7f1d1d;
+    /* 🔥 darker, clinical tone */
+    margin-bottom: 10px;
+}
+
+/* ---------- Section Content ---------- */
+.section-text {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #111827;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+/* ---------- Highlight ---------- */
+.highlight {
+    background: #fde047;
+    font-weight: 800;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+/* ---------- Scrollbar ---------- */
+.section-text::-webkit-scrollbar {
+    width: 8px;
+}
+
+.section-text::-webkit-scrollbar-track {
+    background: #e5e7eb;
+    border-radius: 4px;
+}
+
+.section-text::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 4px;
+}
+
+.section-text::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+/* Firefox */
+.section-text {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #e5e7eb;
+}
+
+/* ---------- No Results ---------- */
+.no-results {
+    text-align: center;
+    padding: 44px;
+    font-size: 16px;
+    color: #6b7280;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+    .search-panel {
+        grid-template-columns: 1fr;
+    }
+}
