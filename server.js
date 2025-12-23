@@ -2,12 +2,16 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
+const mammoth = require("mammoth");   // << ADDED
 
 const app = express();
 const PORT = 3000;
 
 const ALLEN_DIR = path.join(__dirname, "allenhandbook");
 const HERING_DIR = path.join(__dirname, "hering");
+const BOERICKE_FILE = path.join(__dirname, "isilo_boericke.docx");  // << ADDED
+
+let BOERICKE_CACHE = null;  // << ADDED
 
 app.use(express.static("public"));
 app.use(express.json());
@@ -144,9 +148,79 @@ function pushHeringSection(section, searchWord, book, remedy, grouped, seen) {
     });
 }
 
+/* ================= BOERICKE DOCX PARSER ================= */
+
+async function loadBoericke() {
+    if (BOERICKE_CACHE) return BOERICKE_CACHE;
+
+    console.log("Loading Boericke DOCX...");
+
+    const result = await mammoth.extractRawText({ path: BOERICKE_FILE });
+    const lines = result.value.split("\n").map(l => l.trim());
+
+    let remedies = {};
+    let current = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+
+        // Remedy title: ALL CAPS
+        if (/^[A-Z][A-Z\s]+$/.test(line) && line.length > 3) {
+            current = line.trim();
+            remedies[current] = [];
+            i++; // skip common name line
+            continue;
+        }
+
+        if (!current || !line) continue;
+
+        // Subheading e.g. Mind.--, Head.-- etc
+        const match = line.match(/^([A-Za-z]+)\.\-\-\s*(.*)$/);
+
+        if (match) {
+            remedies[current].push({
+                section: match[1].trim(),
+                text: match[2].trim()
+            });
+        } else {
+            remedies[current].push({
+                section: "General",
+                text: line
+            });
+        }
+    }
+
+    BOERICKE_CACHE = remedies;
+    console.log("Boericke Loaded.");
+    return remedies;
+}
+
+function parseBoericke(searchWord, grouped, seen) {
+    if (!BOERICKE_CACHE) return;
+
+    for (const remedy in BOERICKE_CACHE) {
+        const entries = BOERICKE_CACHE[remedy];
+
+        for (const e of entries) {
+            if (!e.text.toLowerCase().includes(searchWord)) continue;
+
+            const key = `boericke||${remedy}||${e.section}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            if (!grouped[remedy]) grouped[remedy] = [];
+
+            grouped[remedy].push({
+                section: e.section,
+                text: e.text
+            });
+        }
+    }
+}
+
 /* ================= API ================= */
 
-app.post("/search", (req, res) => {
+app.post("/search", async (req, res) => {
     const { word, book } = req.body;
     if (!word || !book) return res.json({});
 
@@ -160,11 +234,18 @@ app.post("/search", (req, res) => {
             const html = fs.readFileSync(path.join(ALLEN_DIR, f), "utf8");
             parseAllen(html, searchWord, book, groupedResults, seen);
         }
-    } else {
+    }
+
+    else if (book === "hering") {
         const files = fs.readdirSync(HERING_DIR).filter(f => f.endsWith(".htm"));
         for (const f of files) {
             parseHering(path.join(HERING_DIR, f), searchWord, book, groupedResults, seen);
         }
+    }
+
+    else if (book === "boericke") {
+        await loadBoericke();
+        parseBoericke(searchWord, groupedResults, seen);
     }
 
     res.json(groupedResults);

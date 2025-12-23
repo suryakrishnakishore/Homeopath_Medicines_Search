@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "docx": "^9.5.1",
     "express": "^5.2.1",
     "jsdom": "^27.3.0",
     "mammoth": "^1.11.0",
