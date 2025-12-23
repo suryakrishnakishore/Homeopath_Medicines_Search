@@ -2,16 +2,18 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { JSDOM } = require("jsdom");
-const mammoth = require("mammoth");   // << ADDED
+const mammoth = require("mammoth");
 
 const app = express();
 const PORT = 3000;
 
 const ALLEN_DIR = path.join(__dirname, "allenhandbook");
 const HERING_DIR = path.join(__dirname, "hering");
-const BOERICKE_FILE = path.join(__dirname, "isilo_boericke.docx");  // << ADDED
+const BOERICKE_FILE = path.join(__dirname, "isilo_boericke.docx");
+const KENT_FILE = path.join(__dirname, "isilo_kent.docx");
 
-let BOERICKE_CACHE = null;  // << ADDED
+let BOERICKE_CACHE = null;
+let KENT_CACHE = null;
 
 app.use(express.static("public"));
 app.use(express.json());
@@ -19,17 +21,14 @@ app.use(express.json());
 /* ---------------- UTIL ---------------- */
 
 function clean(text) {
-    return text
-        .replace(/\u00A0/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+    return text.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function stripHTML(html) {
     return html.replace(/<[^>]+>/g, "");
 }
 
-/* ================= ALLEN PARSER ================= */
+/* ================= ALLEN ================= */
 
 function parseAllen(html, searchWord, book, grouped, seen) {
     const dom = new JSDOM(html, {
@@ -39,7 +38,6 @@ function parseAllen(html, searchWord, book, grouped, seen) {
 
     const document = dom.window.document;
 
-    /* --- Remedy name --- */
     let remedy = "Unknown Medicine";
     const centers = [...document.querySelectorAll("p[align='CENTER']")];
     let bookFound = false;
@@ -56,7 +54,6 @@ function parseAllen(html, searchWord, book, grouped, seen) {
         }
     }
 
-    /* --- Sections --- */
     const paragraphs = [...document.querySelectorAll("p")];
     let current = null;
 
@@ -78,16 +75,13 @@ function parseAllen(html, searchWord, book, grouped, seen) {
 
 function pushAllenSection(section, searchWord, book, remedy, grouped, seen) {
     if (!section) return;
-
     if (!section.content.toLowerCase().includes(searchWord)) return;
 
     const key = `${book}||${remedy}||${section.heading}`;
     if (seen.has(key)) return;
     seen.add(key);
 
-    if (!grouped[remedy]) {
-        grouped[remedy] = [];
-    }
+    if (!grouped[remedy]) grouped[remedy] = [];
 
     grouped[remedy].push({
         section: section.heading,
@@ -95,23 +89,17 @@ function pushAllenSection(section, searchWord, book, remedy, grouped, seen) {
     });
 }
 
-/* ================= HERING PARSER ================= */
+/* ================= HERING ================= */
 
 function parseHering(filePath, searchWord, book, grouped, seen) {
     const html = fs.readFileSync(filePath, "utf8");
 
-    /* --- Remedy name from <title> --- */
     let remedy = "Unknown Medicine";
     const titleMatch = html.match(/<title>([^.]+)\./i);
-    if (titleMatch) {
-        remedy = titleMatch[1].trim() + ".";
-    }
+    if (titleMatch) remedy = titleMatch[1].trim() + ".";
 
     const rawText = stripHTML(html);
-    const lines = rawText
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .filter(Boolean);
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
     let current = null;
 
@@ -131,16 +119,13 @@ function parseHering(filePath, searchWord, book, grouped, seen) {
 
 function pushHeringSection(section, searchWord, book, remedy, grouped, seen) {
     if (!section) return;
-
     if (!section.content.toLowerCase().includes(searchWord)) return;
 
     const key = `${book}||${remedy}||${section.heading}`;
     if (seen.has(key)) return;
     seen.add(key);
 
-    if (!grouped[remedy]) {
-        grouped[remedy] = [];
-    }
+    if (!grouped[remedy]) grouped[remedy] = [];
 
     grouped[remedy].push({
         section: section.heading,
@@ -148,12 +133,10 @@ function pushHeringSection(section, searchWord, book, remedy, grouped, seen) {
     });
 }
 
-/* ================= BOERICKE DOCX PARSER ================= */
+/* ================= BOERICKE ================= */
 
 async function loadBoericke() {
     if (BOERICKE_CACHE) return BOERICKE_CACHE;
-
-    console.log("Loading Boericke DOCX...");
 
     const result = await mammoth.extractRawText({ path: BOERICKE_FILE });
     const lines = result.value.split("\n").map(l => l.trim());
@@ -168,13 +151,12 @@ async function loadBoericke() {
         if (/^[A-Z][A-Z\s]+$/.test(line) && line.length > 3) {
             current = line.trim();
             remedies[current] = [];
-            i++; // skip common name line
+            i++;
             continue;
         }
 
         if (!current || !line) continue;
 
-        // Subheading e.g. Mind.--, Head.-- etc
         const match = line.match(/^([A-Za-z]+)\.\-\-\s*(.*)$/);
 
         if (match) {
@@ -191,7 +173,6 @@ async function loadBoericke() {
     }
 
     BOERICKE_CACHE = remedies;
-    console.log("Boericke Loaded.");
     return remedies;
 }
 
@@ -199,20 +180,99 @@ function parseBoericke(searchWord, grouped, seen) {
     if (!BOERICKE_CACHE) return;
 
     for (const remedy in BOERICKE_CACHE) {
-        const entries = BOERICKE_CACHE[remedy];
+        for (const entry of BOERICKE_CACHE[remedy]) {
+            if (!entry.text.toLowerCase().includes(searchWord)) continue;
 
-        for (const e of entries) {
-            if (!e.text.toLowerCase().includes(searchWord)) continue;
-
-            const key = `boericke||${remedy}||${e.section}`;
+            const key = `boericke||${remedy}||${entry.section}`;
             if (seen.has(key)) continue;
             seen.add(key);
 
             if (!grouped[remedy]) grouped[remedy] = [];
 
             grouped[remedy].push({
-                section: e.section,
-                text: e.text
+                section: entry.section,
+                text: entry.text
+            });
+        }
+    }
+}
+
+/* ================= KENT DOCX PARSER ================= */
+
+async function loadKent() {
+    if (KENT_CACHE) return KENT_CACHE;
+
+    console.log("Loading Kent DOCX...");
+
+    const result = await mammoth.extractRawText({ path: KENT_FILE });
+    const lines = result.value
+        .split(/\r?\n/)
+        .map(l => l.trim());
+
+    let remedies = {};
+    let currentRemedy = null;
+    let currentSection = null;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (!line) continue;
+
+        /* ----- Remedy Detection ----- */
+        if (/^[A-Z][a-z]+(?: [A-Z][a-z]+){0,3}$/.test(line)) {
+            currentRemedy = line.trim();
+            remedies[currentRemedy] = [];
+            currentSection = null;
+            continue;
+        }
+
+        if (!currentRemedy) continue;
+
+        /* ----- Subheading Detection ----- */
+        const subMatch = line.match(/^([A-Za-z][A-Za-z ]+):\s*(.*)$/);
+
+        if (subMatch) {
+            const heading = subMatch[1].trim();
+            const firstText = subMatch[2].trim();
+
+            remedies[currentRemedy].push({
+                section: heading,
+                text: firstText
+            });
+
+            currentSection = remedies[currentRemedy].length - 1;
+            continue;
+        }
+
+        /* ----- Content Continuation ----- */
+        if (currentSection !== null) {
+            remedies[currentRemedy][currentSection].text += " " + line;
+        }
+    }
+
+    KENT_CACHE = remedies;
+    console.log("Kent Loaded.");
+
+    return remedies;
+}
+
+function parseKent(searchWord, grouped, seen) {
+    if (!KENT_CACHE) return;
+
+    for (const remedy in KENT_CACHE) {
+        for (const entry of KENT_CACHE[remedy]) {
+
+            if (!entry.text.toLowerCase().includes(searchWord)) continue;
+
+            const key = `kent||${remedy}||${entry.section}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            if (!grouped[remedy]) grouped[remedy] = [];
+
+            grouped[remedy].push({
+                section: entry.section,
+                text: entry.text
             });
         }
     }
@@ -246,6 +306,11 @@ app.post("/search", async (req, res) => {
     else if (book === "boericke") {
         await loadBoericke();
         parseBoericke(searchWord, groupedResults, seen);
+    }
+
+    else if (book === "kent") {
+        await loadKent();
+        parseKent(searchWord, groupedResults, seen);
     }
 
     res.json(groupedResults);
