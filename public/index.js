@@ -1,18 +1,38 @@
 const searchInput = document.getElementById("searchInput");
 const bookSelect = document.getElementById("bookSelect");
+const modeSelect = document.getElementById("modeSelect");
 const searchBtn = document.getElementById("searchBtn");
 const resultsDiv = document.getElementById("results");
 
 /* ---------- Highlight ---------- */
-function highlight(text, word) {
-    const regex = new RegExp(`(${word})`, "gi");
-    return text.replace(regex, `<span class="highlight">$1</span>`);
+function highlight(text, search, mode) {
+    if (mode === "PHRASE") {
+        // highlight exact phrase only
+        const escPhrase = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const phraseRegex = new RegExp(`(${escPhrase})`, "gi");
+        return text.replace(phraseRegex, `<span class="highlight">$1</span>`);
+    }
+
+    // AND/OR → highlight each word separately
+    const words = search.split(/\s+/).filter(Boolean);
+
+    let result = text;
+
+    words.forEach(word => {
+        const escWord = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const wordRegex = new RegExp(`(${escWord})`, "gi");
+        result = result.replace(wordRegex, `<span class="highlight">$1</span>`);
+    });
+
+    return result;
 }
+
 
 /* ---------- Search ---------- */
 searchBtn.addEventListener("click", async () => {
     const word = searchInput.value.trim();
     const book = bookSelect.value;
+    const mode = modeSelect.value;
 
     if (!word) {
         alert("Please enter a search term.");
@@ -27,14 +47,13 @@ searchBtn.addEventListener("click", async () => {
         const res = await fetch("/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ word, book })
+            body: JSON.stringify({ word, book, mode })
         });
 
         const data = await res.json();
 
         if (!Object.keys(data).length) {
-            resultsDiv.innerHTML =
-                `<div class="no-results">No matches found.</div>`;
+            resultsDiv.innerHTML = `<div class="no-results">No matches found.</div>`;
             return;
         }
 
@@ -56,7 +75,7 @@ searchBtn.addEventListener("click", async () => {
                 card.innerHTML = `
                     <div class="section-title">${section.section}</div>
                     <div class="section-text">
-                        ${highlight(section.text, word)}
+                        ${highlight(section.text, word, mode)}
                     </div>
                 `;
 
@@ -69,8 +88,7 @@ searchBtn.addEventListener("click", async () => {
         }
 
     } catch (error) {
-        resultsDiv.innerHTML =
-            `<div class="no-results">Error while searching.</div>`;
+        resultsDiv.innerHTML = `<div class="no-results">Error while searching.</div>`;
     } finally {
         searchBtn.disabled = false;
         searchBtn.textContent = "Search";

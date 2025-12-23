@@ -7,10 +7,11 @@ const mammoth = require("mammoth");
 const app = express();
 const PORT = 3000;
 
+/* -------- Directories -------- */
 const ALLEN_DIR = path.join(__dirname, "allenhandbook");
 const HERING_DIR = path.join(__dirname, "hering");
+const KENT_FILE = path.join(__dirname, "isilo_kent.docx");   // <-- Add Kent text file
 const BOERICKE_FILE = path.join(__dirname, "isilo_boericke.docx");
-const KENT_FILE = path.join(__dirname, "isilo_kent.docx");
 
 let BOERICKE_CACHE = null;
 let KENT_CACHE = null;
@@ -18,7 +19,7 @@ let KENT_CACHE = null;
 app.use(express.static("public"));
 app.use(express.json());
 
-/* ---------------- UTIL ---------------- */
+/* ---------------- UTILITIES ---------------- */
 
 function clean(text) {
     return text.replace(/\u00A0/g, " ").replace(/\s+/g, " ").trim();
@@ -28,16 +29,36 @@ function stripHTML(html) {
     return html.replace(/<[^>]+>/g, "");
 }
 
-/* ================= ALLEN ================= */
+/* ---------- SEARCH MATCHING (UNIFIED) ---------- */
 
-function parseAllen(html, searchWord, book, grouped, seen) {
-    const dom = new JSDOM(html, {
-        runScripts: "outside-only",
-        pretendToBeVisual: false
-    });
+function matchAND(text, words) {
+    text = text.toLowerCase();
+    return words.every(w => text.includes(w));  // substring match
+}
 
+function matchOR(text, words) {
+    text = text.toLowerCase();
+    return words.some(w => text.includes(w));  // substring match
+}
+
+function matchPHRASE(text, phrase) {
+    return text.toLowerCase().includes(phrase.toLowerCase());
+}
+
+function sectionMatches(text, mode, words, phrase) {
+    if (mode === "AND") return matchAND(text, words);
+    if (mode === "OR") return matchOR(text, words);
+    if (mode === "PHRASE") return matchPHRASE(text, phrase);
+    return false;
+}
+
+/* ================== ALLEN PARSER ================== */
+
+function parseAllen(html, words, phrase, mode, grouped, seen) {
+    const dom = new JSDOM(html, { runScripts: "outside-only" });
     const document = dom.window.document;
 
+    // Find remedy name
     let remedy = "Unknown Medicine";
     const centers = [...document.querySelectorAll("p[align='CENTER']")];
     let bookFound = false;
@@ -48,12 +69,13 @@ function parseAllen(html, searchWord, book, grouped, seen) {
             bookFound = true;
             continue;
         }
-        if (bookFound && t.endsWith(".") && t.length < 30) {
+        if (bookFound && t.endsWith(".") && t.length < 50) {
             remedy = t;
             break;
         }
     }
 
+    // Parse sections
     const paragraphs = [...document.querySelectorAll("p")];
     let current = null;
 
@@ -62,22 +84,23 @@ function parseAllen(html, searchWord, book, grouped, seen) {
         const header = text.match(/^([A-Za-z\s]+)\s*:-/);
 
         if (header) {
-            pushAllenSection(current, searchWord, book, remedy, grouped, seen);
+            pushAllenSection(current, words, phrase, mode, remedy, grouped, seen);
             current = { heading: header[1].trim(), content: text };
         } else if (current) {
             current.content += " " + text;
         }
     }
 
-    pushAllenSection(current, searchWord, book, remedy, grouped, seen);
+    pushAllenSection(current, words, phrase, mode, remedy, grouped, seen);
     dom.window.close();
 }
 
-function pushAllenSection(section, searchWord, book, remedy, grouped, seen) {
+function pushAllenSection(section, words, phrase, mode, remedy, grouped, seen) {
     if (!section) return;
-    if (!section.content.toLowerCase().includes(searchWord)) return;
 
-    const key = `${book}||${remedy}||${section.heading}`;
+    if (!sectionMatches(section.content, mode, words, phrase)) return;
+
+    const key = `allen||${remedy}||${section.heading}`;
     if (seen.has(key)) return;
     seen.add(key);
 
@@ -89,16 +112,16 @@ function pushAllenSection(section, searchWord, book, remedy, grouped, seen) {
     });
 }
 
-/* ================= HERING ================= */
+/* ================== HERING PARSER ================== */
 
-function parseHering(filePath, searchWord, book, grouped, seen) {
+function parseHering(filePath, words, phrase, mode, grouped, seen) {
     const html = fs.readFileSync(filePath, "utf8");
+    const rawText = stripHTML(html);
 
     let remedy = "Unknown Medicine";
     const titleMatch = html.match(/<title>([^.]+)\./i);
     if (titleMatch) remedy = titleMatch[1].trim() + ".";
 
-    const rawText = stripHTML(html);
     const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
     let current = null;
@@ -107,24 +130,25 @@ function parseHering(filePath, searchWord, book, grouped, seen) {
         const header = line.match(/^([A-Z ,]+)\.\s*\[\d+\]/);
 
         if (header) {
-            pushHeringSection(current, searchWord, book, remedy, grouped, seen);
+            pushHeringSection(current, words, phrase, mode, remedy, grouped, seen);
             current = { heading: header[1].trim(), content: line };
         } else if (current) {
             current.content += " " + line;
         }
     }
 
-    pushHeringSection(current, searchWord, book, remedy, grouped, seen);
+    pushHeringSection(current, words, phrase, mode, remedy, grouped, seen);
 }
 
-function pushHeringSection(section, searchWord, book, remedy, grouped, seen) {
+function pushHeringSection(section, words, phrase, mode, remedy, grouped, seen) {
     if (!section) return;
-    if (!section.content.toLowerCase().includes(searchWord)) return;
 
-    const key = `${book}||${remedy}||${section.heading}`;
+    if (!sectionMatches(section.content, mode, words, phrase)) return;
+
+    const key = `hering||${remedy}||${section.heading}`;
     if (seen.has(key)) return;
-    seen.add(key);
 
+    seen.add(key);
     if (!grouped[remedy]) grouped[remedy] = [];
 
     grouped[remedy].push({
@@ -133,11 +157,12 @@ function pushHeringSection(section, searchWord, book, remedy, grouped, seen) {
     });
 }
 
-/* ================= BOERICKE ================= */
+/* ================== BOERICKE PARSER ================== */
 
 async function loadBoericke() {
     if (BOERICKE_CACHE) return BOERICKE_CACHE;
 
+    console.log("Loading Boericke DOCX...");
     const result = await mammoth.extractRawText({ path: BOERICKE_FILE });
     const lines = result.value.split("\n").map(l => l.trim());
 
@@ -147,7 +172,6 @@ async function loadBoericke() {
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i];
 
-        // Remedy title: ALL CAPS
         if (/^[A-Z][A-Z\s]+$/.test(line) && line.length > 3) {
             current = line.trim();
             remedies[current] = [];
@@ -176,12 +200,12 @@ async function loadBoericke() {
     return remedies;
 }
 
-function parseBoericke(searchWord, grouped, seen) {
+function parseBoericke(words, phrase, mode, grouped, seen) {
     if (!BOERICKE_CACHE) return;
 
     for (const remedy in BOERICKE_CACHE) {
         for (const entry of BOERICKE_CACHE[remedy]) {
-            if (!entry.text.toLowerCase().includes(searchWord)) continue;
+            if (!sectionMatches(entry.text, mode, words, phrase)) continue;
 
             const key = `boericke||${remedy}||${entry.section}`;
             if (seen.has(key)) continue;
@@ -197,94 +221,70 @@ function parseBoericke(searchWord, grouped, seen) {
     }
 }
 
-/* ================= KENT DOCX PARSER ================= */
+/* ================== KENT PARSER ================== */
 
 async function loadKent() {
     if (KENT_CACHE) return KENT_CACHE;
 
-    console.log("Loading Kent DOCX...");
-
-    const result = await mammoth.extractRawText({ path: KENT_FILE });
-    const lines = result.value
-        .split(/\r?\n/)
-        .map(l => l.trim());
+    const raw = fs.readFileSync(KENT_FILE, "utf8");
 
     let remedies = {};
     let currentRemedy = null;
-    let currentSection = null;
+
+    const lines = raw.split("\n").map(l => l.trim());
 
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        let line = lines[i];
 
-        if (!line) continue;
-
-        /* ----- Remedy Detection ----- */
-        if (/^[A-Z][a-z]+(?: [A-Z][a-z]+){0,3}$/.test(line)) {
+        if (/^[A-Z][A-Za-z\s]+$/.test(line) && line.length > 3) {
             currentRemedy = line.trim();
             remedies[currentRemedy] = [];
-            currentSection = null;
             continue;
         }
 
-        if (!currentRemedy) continue;
+        if (!currentRemedy || !line) continue;
 
-        /* ----- Subheading Detection ----- */
-        const subMatch = line.match(/^([A-Za-z][A-Za-z ]+):\s*(.*)$/);
-
-        if (subMatch) {
-            const heading = subMatch[1].trim();
-            const firstText = subMatch[2].trim();
-
-            remedies[currentRemedy].push({
-                section: heading,
-                text: firstText
-            });
-
-            currentSection = remedies[currentRemedy].length - 1;
-            continue;
-        }
-
-        /* ----- Content Continuation ----- */
-        if (currentSection !== null) {
-            remedies[currentRemedy][currentSection].text += " " + line;
-        }
+        remedies[currentRemedy].push({
+            section: "Lecture",
+            text: line
+        });
     }
 
     KENT_CACHE = remedies;
-    console.log("Kent Loaded.");
-
     return remedies;
 }
 
-function parseKent(searchWord, grouped, seen) {
+function parseKent(words, phrase, mode, grouped, seen) {
     if (!KENT_CACHE) return;
 
     for (const remedy in KENT_CACHE) {
         for (const entry of KENT_CACHE[remedy]) {
+            if (!sectionMatches(entry.text, mode, words, phrase)) continue;
 
-            if (!entry.text.toLowerCase().includes(searchWord)) continue;
-
-            const key = `kent||${remedy}||${entry.section}`;
+            const key = `kent||${remedy}`;
             if (seen.has(key)) continue;
             seen.add(key);
 
             if (!grouped[remedy]) grouped[remedy] = [];
 
             grouped[remedy].push({
-                section: entry.section,
+                section: "Lecture",
                 text: entry.text
             });
         }
     }
 }
 
-/* ================= API ================= */
+/* ================== SEARCH API ================== */
 
 app.post("/search", async (req, res) => {
-    const { word, book } = req.body;
+    const { word, book, mode } = req.body;
+
     if (!word || !book) return res.json({});
 
-    const searchWord = word.toLowerCase();
+    const searchWords = word.toLowerCase().split(/\s+/).filter(Boolean);
+    const phrase = word.trim();
+
     const groupedResults = {};
     const seen = new Set();
 
@@ -292,25 +292,25 @@ app.post("/search", async (req, res) => {
         const files = fs.readdirSync(ALLEN_DIR).filter(f => f.endsWith(".htm"));
         for (const f of files) {
             const html = fs.readFileSync(path.join(ALLEN_DIR, f), "utf8");
-            parseAllen(html, searchWord, book, groupedResults, seen);
+            parseAllen(html, searchWords, phrase, mode, groupedResults, seen);
         }
     }
 
     else if (book === "hering") {
         const files = fs.readdirSync(HERING_DIR).filter(f => f.endsWith(".htm"));
         for (const f of files) {
-            parseHering(path.join(HERING_DIR, f), searchWord, book, groupedResults, seen);
+            parseHering(path.join(HERING_DIR, f), searchWords, phrase, mode, groupedResults, seen);
         }
     }
 
     else if (book === "boericke") {
         await loadBoericke();
-        parseBoericke(searchWord, groupedResults, seen);
+        parseBoericke(searchWords, phrase, mode, groupedResults, seen);
     }
 
     else if (book === "kent") {
         await loadKent();
-        parseKent(searchWord, groupedResults, seen);
+        parseKent(searchWords, phrase, mode, groupedResults, seen);
     }
 
     res.json(groupedResults);

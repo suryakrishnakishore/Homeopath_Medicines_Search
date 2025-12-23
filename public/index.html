@@ -11,23 +11,39 @@
 <body>
 
     <header class="header">
-        <h1>Homeopathy Medicines Search</h1>
-        <p class="subtitle">Allen, Hering & Boericke – Section-wise Search</p>
+        <div class="header-content">
+            <h1>Homeopathy Medicines Search</h1>
+            <p class="subtitle">Unified Search Across Allen • Hering • Boericke • Kent</p>
+        </div>
     </header>
 
     <main class="container">
 
-        <div class="search-panel">
-            <input id="searchInput" type="text" placeholder="Search term (e.g. tongue)" />
+        <div class="search-card">
+            <div class="search-panel">
+                <input id="searchInput" type="text" placeholder="Search words (e.g. tongue pain sweat)" />
 
-            <select id="bookSelect">
-                <option value="allen">Allen Handbook</option>
-                <option value="hering">Hering – Guiding Symptoms</option>
-                <option value="boericke">Boericke (DOCX)</option>
-                <option value="kent">Kent Lectures (DOCX)</option>
-            </select>
+                <select id="bookSelect">
+                    <option value="allen">Allen Handbook</option>
+                    <option value="hering">Hering</option>
+                    <option value="boericke">Boericke (DOCX)</option>
+                    <option value="kent">Kent (DOCX)</option>
+                </select>
 
-            <button id="searchBtn">Search</button>
+                <select id="modeSelect">
+                    <option value="OR">OR (any word)</option>
+                    <option value="AND">AND (all words)</option>
+                    <option value="PHRASE">Phrase (exact sequence)</option>
+                </select>
+
+                <button id="searchBtn">Search</button>
+            </div>
+
+            <div class="tip-box">
+                <strong>Tips:</strong>
+                Type multiple words separated by spaces.
+                Use “Phrase” mode for exact sequences (e.g. "cold sweat").
+            </div>
         </div>
 
         <div id="results"></div>
@@ -36,5 +52,6 @@
 
     <script src="index.js"></script>
 </body>
+
 
 </html>
