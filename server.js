@@ -118,11 +118,29 @@ function parseHering(filePath, words, phrase, mode, grouped, seen) {
     const html = fs.readFileSync(filePath, "utf8");
     const rawText = stripHTML(html);
 
+    // Extract remedy name from <title>, skip red/blue headings
     let remedy = "Unknown Medicine";
     const titleMatch = html.match(/<title>([^.]+)\./i);
-    if (titleMatch) remedy = titleMatch[1].trim() + ".";
 
-    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (titleMatch) {
+        let title = titleMatch[1].trim();
+
+        // Skip invalid red/blue titles
+        if (
+            title.toLowerCase().includes("red") ||
+            title.toLowerCase().includes("blue") ||
+            title.length < 3
+        ) {
+            return; // skip this hering entry completely
+        }
+
+        remedy = title + ".";
+    }
+
+    const lines = rawText
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
 
     let current = null;
 
@@ -139,6 +157,7 @@ function parseHering(filePath, words, phrase, mode, grouped, seen) {
 
     pushHeringSection(current, words, phrase, mode, remedy, grouped, seen);
 }
+
 
 function pushHeringSection(section, words, phrase, mode, remedy, grouped, seen) {
     if (!section) return;
