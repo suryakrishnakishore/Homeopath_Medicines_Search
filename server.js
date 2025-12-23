@@ -226,24 +226,29 @@ function parseBoericke(words, phrase, mode, grouped, seen) {
 async function loadKent() {
     if (KENT_CACHE) return KENT_CACHE;
 
-    const raw = fs.readFileSync(KENT_FILE, "utf8");
+    console.log("Loading Kent DOCX…");
+
+    // Extract **plain text** from DOCX
+    const result = await mammoth.extractRawText({ path: KENT_FILE });
+    const lines = result.value
+        .split("\n")
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
 
     let remedies = {};
     let currentRemedy = null;
 
-    const lines = raw.split("\n").map(l => l.trim());
-
     for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
-
-        if (/^[A-Z][A-Za-z\s]+$/.test(line) && line.length > 3) {
+        const line = lines[i];
+        if (/^[A-Z][A-Za-z\s]+$/.test(line) && line.length > 5) {
             currentRemedy = line.trim();
             remedies[currentRemedy] = [];
             continue;
         }
 
-        if (!currentRemedy || !line) continue;
+        if (!currentRemedy) continue;
 
+        // Kent has long blocks → treat each paragraph as a "section"
         remedies[currentRemedy].push({
             section: "Lecture",
             text: line
@@ -251,6 +256,7 @@ async function loadKent() {
     }
 
     KENT_CACHE = remedies;
+    console.log("Kent DOCX Loaded.");
     return remedies;
 }
 
@@ -261,14 +267,14 @@ function parseKent(words, phrase, mode, grouped, seen) {
         for (const entry of KENT_CACHE[remedy]) {
             if (!sectionMatches(entry.text, mode, words, phrase)) continue;
 
-            const key = `kent||${remedy}`;
+            const key = `kent||${remedy}||lecture`;
             if (seen.has(key)) continue;
             seen.add(key);
 
             if (!grouped[remedy]) grouped[remedy] = [];
 
             grouped[remedy].push({
-                section: "Lecture",
+                section: entry.section,
                 text: entry.text
             });
         }
